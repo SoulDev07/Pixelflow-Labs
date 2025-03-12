@@ -19,7 +19,9 @@ from nltk.tokenize import word_tokenize
 from transformers import pipeline
 from atproto import Client
 import logging
+import google.generativeai as genai
 
+# Set up logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -30,26 +32,42 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Load environment variables
 load_dotenv()
 
+# Download NLTK resources
 try:
     nltk.download('punkt', quiet=True)
     nltk.download('stopwords', quiet=True)
 except Exception as e:
     logger.error(f"Failed to download NLTK resources: {e}")
 
+# Initialize MongoDB client
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 client = MongoClient(MONGO_URI)
 db = client["PixelFlowLabs"]
-trend_collection = db["trends"]
-analysis_collection = db["analysis"]
+collection = db["trends"]  # Changed from "analysis" to "trends"
 
+# Initialize sentiment analysis pipeline
 try:
     sentiment_analyzer = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
 except Exception as e:
     logger.error(f"Failed to load transformer model: {e}")
     sentiment_analyzer = None
 
+# Initialize Google Gemini AI
+try:
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    genai.configure(api_key=GEMINI_API_KEY)
+    # Initialize Gemini model
+    gemini_model = genai.GenerativeModel('gemini-2.0-flash')
+    GEMINI_AVAILABLE = True
+    logger.info("Successfully initialized Gemini AI")
+except Exception as e:
+    logger.error(f"Failed to initialize Gemini AI: {e}")
+    GEMINI_AVAILABLE = False
+
+# Check if a text is related to a domain
 def is_domain_related(text, domain_keywords):
     if not text or not domain_keywords:
         return False
@@ -60,6 +78,7 @@ def is_domain_related(text, domain_keywords):
             return True
     return False
 
+# Initialize API clients
 def init_reddit():
     try:
         reddit = praw.Reddit(
@@ -89,11 +108,15 @@ def init_bluesky():
         logger.error(f"Failed to initialize Bluesky client: {e}")
         return None
 
+# Text preprocessing functions
 def preprocess_text(text):
     if not text:
         return ""
+    # Convert to lowercase
     text = text.lower()
+    # Remove URLs
     text = re.sub(r'http\S+', '', text)
+    # Remove special characters and numbers
     text = re.sub(r'[^\w\s]', '', text)
     text = re.sub(r'\d+', '', text)
     return text
@@ -101,6 +124,7 @@ def preprocess_text(text):
 def extract_hashtags(text):
     if not text:
         return []
+    # Find all hashtags in the text
     hashtags = re.findall(r'#(\w+)', text)
     return hashtags
 
@@ -112,26 +136,36 @@ def remove_stopwords(text):
     filtered_text = [word for word in word_tokens if word not in stop_words]
     return ' '.join(filtered_text)
 
-def get_top_words(texts, n=20):
+def get_top_words(texts, n=10):
+    """Get top N words from a list of texts"""
+    # Initialize Counter
     word_counts = Counter()
+    
+    # Get stopwords
     stop_words = set(stopwords.words('english'))
     
     for text in texts:
         if not isinstance(text, str):
             continue
             
-        text = preprocess_text(text)
+        # Tokenize and clean text
+        text = text.lower()
+        text = re.sub(r'[^\w\s]', '', text)
         words = word_tokenize(text)
         
+        # Filter words
         words = [word for word in words 
                 if word.isalnum() 
                 and len(word) > 2 
                 and word not in stop_words]
         
+        # Update counter
         word_counts.update(words)
     
+    # Return top N words
     return dict(word_counts.most_common(n))
 
+# Sentiment analysis functions
 def analyze_sentiment_textblob(text):
     if not text:
         return {"polarity": 0, "subjectivity": 0}
@@ -145,73 +179,180 @@ def analyze_sentiment_transformers(text):
     if not sentiment_analyzer or not text:
         return {"label": "NEUTRAL", "score": 0.5}
     try:
-        result = sentiment_analyzer(text[:512])[0]
+        result = sentiment_analyzer(text[:512])[0]  # Limit text length for the model
         return result
     except Exception as e:
         logger.error(f"Transformer sentiment analysis error: {e}")
         return {"label": "NEUTRAL", "score": 0.5}
 
-def get_aggregate_sentiment(texts, domain=None):
+def get_aggregate_sentiment(texts):
     if not texts:
         return {
             "textblob": {"avg_polarity": 0, "avg_subjectivity": 0},
-            "transformer": {"positive_percentage": 50, "avg_confidence": 0.5},
-            "sentiment_label": "neutral"
+            "transformer": {"positive_percentage": 50, "avg_confidence": 0.5}
         }
     
+    # TextBlob sentiment
     polarities = []
     subjectivities = []
+    
+    # Transformer sentiment
     positive_count = 0
     confidence_scores = []
     
-    domain_texts = []
-    if domain:
-        domain_texts = [text for text in texts if is_domain_related(text, domain)]
-    
-    target_texts = domain_texts if domain and domain_texts else texts
-    
-    for text in target_texts:
+    for text in texts:
         if text:
+            # TextBlob analysis
             tb_sentiment = analyze_sentiment_textblob(text)
             polarities.append(tb_sentiment["polarity"])
             subjectivities.append(tb_sentiment["subjectivity"])
             
+            # Transformer analysis
             if sentiment_analyzer:
                 tf_sentiment = analyze_sentiment_transformers(text)
                 if tf_sentiment["label"] == "POSITIVE":
                     positive_count += 1
                 confidence_scores.append(tf_sentiment["score"])
     
-    total = len(target_texts) if target_texts else 1
-    avg_polarity = sum(polarities) / len(polarities) if polarities else 0
-    
-    sentiment_label = "neutral"
-    if avg_polarity > 0.2:
-        sentiment_label = "positive"
-    elif avg_polarity < -0.2:
-        sentiment_label = "negative"
+    total = len(texts) if texts else 1
     
     return {
         "textblob": {
-            "avg_polarity": avg_polarity,
+            "avg_polarity": sum(polarities) / len(polarities) if polarities else 0,
             "avg_subjectivity": sum(subjectivities) / len(subjectivities) if subjectivities else 0
         },
         "transformer": {
             "positive_percentage": (positive_count / total) * 100 if total > 0 else 50,
             "avg_confidence": sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.5
-        },
-        "sentiment_label": sentiment_label
+        }
     }
 
+# AI Analysis Functions
+def generate_ai_analysis(analysis_data, domain=None):
+    """
+    Use Gemini AI to analyze trends and provide insights
+    """
+    if not GEMINI_AVAILABLE:
+        logger.warning("Gemini AI not available, skipping AI analysis")
+        return {
+            "error": "Gemini AI not configured properly",
+            "timestamp": datetime.datetime.utcnow().isoformat()
+        }
+    
+    try:
+        # Prepare context for the AI
+        domain_context = f"in the {domain} domain" if domain else "across social media"
+        
+        # Extract key information for analysis
+        top_hashtags = list(analysis_data.get("top_hashtags", {}).keys())[:10]
+        top_words = list(analysis_data.get("top_words", {}).keys())[:10]
+        top_trends = analysis_data.get("top_trends", [])[:10]
+        sentiment_data = analysis_data.get("sentiment", {})
+        
+        # Get platform-specific data
+        reddit_data = analysis_data.get("platform_data", {}).get("reddit", {})
+        youtube_data = analysis_data.get("platform_data", {}).get("youtube", {})
+        bluesky_data = analysis_data.get("platform_data", {}).get("bluesky", {})
+        
+        # Extract top posts/videos from platforms
+        reddit_posts = reddit_data.get("hot_posts", [])[:5]
+        youtube_videos = youtube_data.get("trending_videos", [])[:5]
+        bluesky_posts = bluesky_data.get("popular_posts", [])[:5]
+        
+        # Construct prompt for Gemini
+        prompt = f"""
+        As a social media trend analyst, analyze the following trending data {domain_context} and provide insights:
+        
+        Top Hashtags: {', '.join(top_hashtags) if top_hashtags else 'None available'}
+        
+        Top Keywords: {', '.join(top_words) if top_words else 'None available'}
+        
+        Top Trends: {', '.join(top_trends) if top_trends else 'None available'}
+        
+        Overall Sentiment: {sentiment_data.get('overall_mood', 'neutral')}
+        
+        Sample Content:
+        - Reddit: {[post.get('title', '') for post in reddit_posts] if reddit_posts else 'None available'}
+        - YouTube: {[video.get('title', '') for video in youtube_videos] if youtube_videos else 'None available'}
+        - Bluesky: {[post.get('text', '') for post in bluesky_posts] if bluesky_posts else 'None available'}
+        
+        Based on this data, provide:
+        1. Key insights about current trends {domain_context} (3-5 bullet points)
+        2. Emerging patterns or themes
+        3. User sentiment analysis and what it reveals
+        4. Content strategy recommendations based on these trends
+        5. Predicted trend trajectory for the next 24-48 hours
+        
+        Format your response as JSON with the following keys:
+        - "key_insights": array of strings
+        - "emerging_patterns": array of strings
+        - "sentiment_analysis": string
+        - "content_recommendations": array of strings
+        - "trend_prediction": string
+        - "summary": string (brief overall summary)
+        """
+        
+        # Request analysis from Gemini
+        logger.info("Sending request to Gemini AI for trend analysis")
+        response = gemini_model.generate_content(prompt)
+        
+        # Process the response
+        if hasattr(response, 'text'):
+            response_text = response.text
+            
+            # Try to extract JSON from the response
+            try:
+                # Find JSON content in the response
+                json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(1)
+                else:
+                    # If no code block, try to parse the entire response
+                    json_str = response_text
+                
+                # Parse the JSON content
+                ai_analysis = json.loads(json_str)
+                
+                # Add timestamp
+                ai_analysis["timestamp"] = datetime.datetime.utcnow().isoformat()
+                
+                logger.info("Successfully generated AI analysis")
+                return ai_analysis
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse Gemini response as JSON: {e}")
+                
+                # Fallback: create a structured response manually
+                return {
+                    "error": "Could not parse AI response as JSON",
+                    "raw_response": response_text,
+                    "timestamp": datetime.datetime.utcnow().isoformat()
+                }
+        else:
+            logger.error("Gemini response didn't contain text attribute")
+            return {
+                "error": "Invalid response from Gemini AI",
+                "timestamp": datetime.datetime.utcnow().isoformat()
+            }
+    except Exception as e:
+        logger.error(f"Error generating AI analysis: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return {
+            "error": f"Failed to generate AI analysis: {str(e)}",
+            "timestamp": datetime.datetime.utcnow().isoformat()
+        }
+
+# Data fetching functions
 def fetch_reddit_trends(domain_keywords=None):
     reddit = init_reddit()
     if not reddit:
         return {"success": False, "data": {}}
     
     try:
+        # Get trending subreddits
         trending_subreddits = []
-        hot_posts = []
         
+        # Get domain specific subreddits if domain keywords provided
         if domain_keywords:
             search_query = " OR ".join(domain_keywords)
             for subreddit in reddit.subreddits.search(search_query, limit=10):
@@ -220,7 +361,22 @@ def fetch_reddit_trends(domain_keywords=None):
                     "subscribers": subreddit.subscribers,
                     "description": subreddit.public_description
                 })
-            
+        # Otherwise get popular subreddits
+        else:
+            for subreddit in reddit.subreddits.popular(limit=10):
+                trending_subreddits.append({
+                    "name": subreddit.display_name,
+                    "subscribers": subreddit.subscribers,
+                    "description": subreddit.public_description
+                })
+        
+        # Get hot posts
+        hot_posts = []
+        subreddit_to_search = "all"
+        
+        # If domain keywords provided, try to find domain-specific posts
+        if domain_keywords:
+            search_query = " OR ".join(domain_keywords)
             for submission in reddit.subreddit("all").search(search_query, sort="hot", limit=25):
                 hot_posts.append({
                     "title": submission.title,
@@ -231,13 +387,6 @@ def fetch_reddit_trends(domain_keywords=None):
                     "created_utc": datetime.datetime.fromtimestamp(submission.created_utc).isoformat()
                 })
         else:
-            for subreddit in reddit.subreddits.popular(limit=10):
-                trending_subreddits.append({
-                    "name": subreddit.display_name,
-                    "subscribers": subreddit.subscribers,
-                    "description": subreddit.public_description
-                })
-            
             for submission in reddit.subreddit("all").hot(limit=25):
                 hot_posts.append({
                     "title": submission.title,
@@ -248,6 +397,7 @@ def fetch_reddit_trends(domain_keywords=None):
                     "created_utc": datetime.datetime.fromtimestamp(submission.created_utc).isoformat()
                 })
         
+        # Filter by domain if needed
         if domain_keywords and hot_posts:
             hot_posts = [post for post in hot_posts if is_domain_related(post.get("title", ""), domain_keywords)]
         
@@ -270,6 +420,7 @@ def fetch_youtube_trends(domain_keywords=None):
     try:
         trending_videos = []
         
+        # If domain keywords are provided, search for videos related to the domain
         if domain_keywords:
             for keyword in domain_keywords:
                 search_request = youtube.search().list(
@@ -281,9 +432,11 @@ def fetch_youtube_trends(domain_keywords=None):
                 )
                 search_response = search_request.execute()
                 
+                # Get video IDs from search results
                 video_ids = [item['id']['videoId'] for item in search_response.get('items', [])]
                 
                 if video_ids:
+                    # Get detailed information for these videos
                     videos_request = youtube.videos().list(
                         part="snippet,statistics",
                         id=','.join(video_ids)
@@ -306,6 +459,7 @@ def fetch_youtube_trends(domain_keywords=None):
                             "keyword": keyword
                         })
         else:
+            # Get general trending videos
             trending_request = youtube.videos().list(
                 part="snippet,statistics",
                 chart="mostPopular",
@@ -329,6 +483,7 @@ def fetch_youtube_trends(domain_keywords=None):
                     "video_id": item.get("id", "")
                 })
         
+        # Remove duplicates by video_id
         seen_ids = set()
         unique_videos = []
         for video in trending_videos:
@@ -339,7 +494,7 @@ def fetch_youtube_trends(domain_keywords=None):
         return {
             "success": True,
             "data": {
-                "trending_videos": unique_videos[:25]
+                "trending_videos": unique_videos[:25]  # Limit to 25 videos
             }
         }
     except Exception as e:
@@ -349,15 +504,21 @@ def fetch_youtube_trends(domain_keywords=None):
 def fetch_bluesky_trends(domain_keywords=None):
     client = init_bluesky()
     if not client:
+        logger.error("Failed to initialize Bluesky client")
         return {"success": False, "data": {}}
     
     try:
         posts = []
         hashtags = []
         
+        # Get feed generator for trending content
         feed_generator = "at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot"
         
         try:
+            # Log authentication status
+            logger.info("Bluesky client initialized, attempting to fetch feed")
+            
+            # Get trending feed
             feed = client.app.bsky.feed.get_feed({
                 'feed': feed_generator,
                 'limit': 100
@@ -367,22 +528,29 @@ def fetch_bluesky_trends(domain_keywords=None):
                 }
             })
             
+            logger.info(f"Successfully retrieved Bluesky feed with {len(feed.feed) if hasattr(feed, 'feed') else 0} items")
+            
             if hasattr(feed, 'feed'):
                 for feed_view in feed.feed:
                     try:
+                        # Extract post data with extensive error handling
                         post = feed_view.post
                         
                         if not hasattr(post, 'record'):
+                            logger.warning("Post missing record attribute")
                             continue
                             
                         post_text = post.record.text if hasattr(post.record, 'text') else ''
                         
+                        # Extract hashtags
                         post_hashtags = extract_hashtags(post_text)
                         hashtags.extend(post_hashtags)
                         
+                        # Skip if domain filtering is enabled and post doesn't match
                         if domain_keywords and not is_domain_related(post_text, domain_keywords):
                             continue
                         
+                        # Get engagement metrics
                         created_at = post.record.createdAt if hasattr(post.record, 'createdAt') else ''
                         
                         posts.append({
@@ -394,11 +562,19 @@ def fetch_bluesky_trends(domain_keywords=None):
                             "hashtags": post_hashtags
                         })
                     except Exception as e:
+                        logger.warning(f"Error processing individual Bluesky post: {e}")
                         continue
-                        
+            else:
+                logger.warning("Feed response missing 'feed' attribute")
+                
         except Exception as e:
+            # Fallback to timeline if get_feed fails
+            logger.warning(f"Failed to get trending feed, falling back to timeline: {e}")
+            
             try:
                 timeline = client.app.bsky.feed.get_timeline({'limit': 25})
+                
+                logger.info(f"Successfully retrieved Bluesky timeline with {len(timeline.feed) if hasattr(timeline, 'feed') else 0} items")
                 
                 if hasattr(timeline, 'feed'):
                     for feed_view in timeline.feed:
@@ -406,6 +582,7 @@ def fetch_bluesky_trends(domain_keywords=None):
                             post = feed_view.post
                             
                             if not hasattr(post, 'record'):
+                                logger.warning("Timeline post missing record attribute")
                                 continue
                                 
                             post_text = post.record.text if hasattr(post.record, 'text') else ''
@@ -427,17 +604,24 @@ def fetch_bluesky_trends(domain_keywords=None):
                                 "hashtags": post_hashtags
                             })
                         except Exception as e:
+                            logger.warning(f"Error processing individual timeline post: {e}")
                             continue
+                else:
+                    logger.warning("Timeline response missing 'feed' attribute")
             except Exception as e:
                 logger.error(f"Failed to fetch timeline: {e}")
         
+        # Count hashtag frequency
         hashtag_counts = Counter(hashtags)
         
+        # Filter hashtags by domain if needed
         if domain_keywords:
             hashtag_counts = Counter({
                 tag: count for tag, count in hashtag_counts.items()
                 if any(keyword.lower() in tag.lower() for keyword in domain_keywords)
             })
+        
+        logger.info(f"Processed {len(posts)} Bluesky posts and found {len(hashtag_counts)} unique hashtags")
         
         return {
             "success": True,
@@ -448,53 +632,50 @@ def fetch_bluesky_trends(domain_keywords=None):
         }
     except Exception as e:
         logger.error(f"Error fetching Bluesky trends: {e}")
+        logger.error(f"Exception details: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return {"success": False, "data": {}}
 
-def get_top_news(all_texts, domain_keywords=None, limit=10):
-    news_items = []
+# Main function to collect and analyze trends
+def analyze_trends(domain=None):
+    logger.info(f"Starting trend analysis{' for domain: ' + domain if domain else ''}...")
     
-    # Extract potential news from all texts
-    for text in all_texts:
-        if len(text) > 40:  # Minimum length for a news item
-            if domain_keywords and not is_domain_related(text, domain_keywords):
-                continue
-            
-            # Basic heuristic for identifying news-like content
-            if any(keyword in text.lower() for keyword in ['new', 'launch', 'announce', 'discover', 'reveal', 'update']):
-                news_items.append(text)
+    # Parse domain into keywords if provided
+    domain_keywords = None
+    if domain:
+        domain_keywords = [kw.strip() for kw in domain.split(',')]
+        logger.info(f"Using domain keywords: {domain_keywords}")
     
-    # Sort by length as a very basic relevance metric (longer texts might be more informative)
-    news_items.sort(key=len, reverse=True)
+    # Get the current timestamp
+    timestamp = datetime.datetime.utcnow().isoformat()
     
-    return news_items[:limit]
-
-def calculate_trend_metrics(reddit_data, youtube_data, bluesky_data, domain_keywords=None):
+    # Fetch data from all platforms
+    reddit_data = fetch_reddit_trends(domain_keywords)
+    youtube_data = fetch_youtube_trends(domain_keywords)
+    bluesky_data = fetch_bluesky_trends(domain_keywords)
+    
+    # Extract all text content for analysis
     all_texts = []
     
     # Process reddit data
-    reddit_posts = []
     if reddit_data["success"]:
-        reddit_posts = reddit_data["data"].get("hot_posts", [])
-        for post in reddit_posts:
+        for post in reddit_data["data"].get("hot_posts", []):
             all_texts.append(post.get("title", ""))
     
     # Process youtube data
-    youtube_videos = []
     if youtube_data["success"]:
-        youtube_videos = youtube_data["data"].get("trending_videos", [])
-        for video in youtube_videos:
+        for video in youtube_data["data"].get("trending_videos", []):
             all_texts.append(video.get("title", ""))
             all_texts.append(video.get("description", ""))
     
     # Process bluesky data
-    bluesky_posts = []
     if bluesky_data["success"]:
-        bluesky_posts = bluesky_data["data"].get("popular_posts", [])
-        for post in bluesky_posts:
+        for post in bluesky_data["data"].get("popular_posts", []):
             all_texts.append(post.get("text", ""))
     
-    # Get most used words
-    most_used_words = get_top_words(all_texts, 30)
+    # Analyze the collected data
+    top_words = get_top_words(all_texts)
     
     # Get all hashtags
     all_hashtags = []
@@ -509,123 +690,81 @@ def calculate_trend_metrics(reddit_data, youtube_data, bluesky_data, domain_keyw
     top_hashtags = dict(hashtag_counts.most_common(30))
     
     # Perform sentiment analysis
-    sentiment_data = get_aggregate_sentiment(all_texts, domain_keywords)
+    sentiment_data = get_aggregate_sentiment(all_texts)
     
-    # Get top news
-    top_news = get_top_news(all_texts, domain_keywords)
+    # Determine overall trend mood
+    trend_mood = "neutral"
+    if sentiment_data["textblob"]["avg_polarity"] > 0.2:
+        trend_mood = "positive"
+    elif sentiment_data["textblob"]["avg_polarity"] < -0.2:
+        trend_mood = "negative"
     
-    # Calculate engagement metrics
-    total_engagement = {
-        "reddit": {
-            "total_posts": len(reddit_posts),
-            "total_score": sum(post.get("score", 0) for post in reddit_posts),
-            "total_comments": sum(post.get("comments", 0) for post in reddit_posts)
-        },
-        "youtube": {
-            "total_videos": len(youtube_videos),
-            "total_views": sum(video.get("view_count", 0) for video in youtube_videos),
-            "total_likes": sum(video.get("like_count", 0) for video in youtube_videos),
-            "total_comments": sum(video.get("comment_count", 0) for video in youtube_videos)
-        },
-        "bluesky": {
-            "total_posts": len(bluesky_posts),
-            "total_likes": sum(post.get("likes", 0) for post in bluesky_posts),
-            "total_replies": sum(post.get("replies", 0) for post in bluesky_posts),
-            "total_reposts": sum(post.get("reposts", 0) for post in bluesky_posts)
-        }
-    }
+    # Extract top trends
+    top_trends = []
     
-    # Find top influencers
-    top_reddit_authors = Counter()
-    for post in reddit_posts:
-        subreddit = post.get("subreddit", "")
-        if subreddit:
-            top_reddit_authors[subreddit] += post.get("score", 0)
+    # From Reddit
+    if reddit_data["success"]:
+        for subreddit in reddit_data["data"].get("trending_subreddits", [])[:5]:
+            top_trends.append(subreddit.get("name", ""))
     
-    top_youtube_channels = Counter()
-    for video in youtube_videos:
-        channel = video.get("channel", "")
-        if channel:
-            top_youtube_channels[channel] += video.get("view_count", 0)
+    # From YouTube
+    if youtube_data["success"]:
+        for video in youtube_data["data"].get("trending_videos", [])[:5]:
+            # Extract main topic from title
+            title = video.get("title", "")
+            if title:
+                title_words = title.split()
+                if len(title_words) > 3:
+                    top_trends.append(" ".join(title_words[:3]) + "...")
+                else:
+                    top_trends.append(title)
     
-    # Prepare metrics document
-    metrics = {
-        "most_used_words": most_used_words,
+    # Create the initial analysis document
+    analysis_doc = {
+        "timestamp": timestamp,
+        "domain": domain,
         "top_hashtags": top_hashtags,
-        "sentiment": sentiment_data,
-        "top_news": top_news,
-        "engagement": total_engagement,
-        "top_influencers": {
-            "reddit": dict(top_reddit_authors.most_common(10)),
-            "youtube": dict(top_youtube_channels.most_common(10))
+        "top_words": top_words,
+        "top_trends": top_trends,
+        "sentiment": {
+            "overall_mood": trend_mood,
+            "data": sentiment_data
+        },
+        "platform_data": {
+            "reddit": reddit_data["data"] if reddit_data["success"] else {},
+            "youtube": youtube_data["data"] if youtube_data["success"] else {},
+            "bluesky": bluesky_data["data"] if bluesky_data["success"] else {}
         }
     }
     
-    return metrics
-
-def analyze_trends(domain=None):
-    logger.info(f"Starting condensed trend analysis{' for domain: ' + domain if domain else ''}...")
-    
-    domain_keywords = None
-    if domain:
-        domain_keywords = [kw.strip() for kw in domain.split(',')]
-    
-    timestamp = datetime.datetime.utcnow().isoformat()
-    
-    # Fetch data from all platforms
-    reddit_data = fetch_reddit_trends(domain_keywords)
-    youtube_data = fetch_youtube_trends(domain_keywords)
-    bluesky_data = fetch_bluesky_trends(domain_keywords)
-    
-    # Calculate consolidated metrics
-    metrics = calculate_trend_metrics(reddit_data, youtube_data, bluesky_data, domain_keywords)
-    
-    # Create the condensed analysis document
-    condensed_doc = {
-        "timestamp": timestamp,
-        "domain": domain,
-        "metrics": metrics
-    }
-    
-    # Create time series entry for tracking changes over time
-    time_series_doc = {
-        "timestamp": timestamp,
-        "domain": domain,
-        "most_used_words": metrics["most_used_words"],
-        "top_hashtags": metrics["top_hashtags"],
-        "sentiment": metrics["sentiment"],
-        "engagement": metrics["engagement"]
-    }
+    # Add AI analysis
+    logger.info("Generating AI analysis of trends")
+    ai_analysis = generate_ai_analysis(analysis_doc, domain)
+    analysis_doc["ai_analysis"] = ai_analysis
     
     # Store in MongoDB
     try:
-        # Use upsert for current analysis
-        trend_collection.update_one(
-            {"_id": f"current_trends{'_' + domain.replace(',', '_') if domain else ''}"},
-            {"$set": condensed_doc},
-            upsert=True
-        )
-        
-        # Insert time series data with unique timestamp ID
-        analysis_collection.insert_one({
-            "_id": f"trends_{timestamp.replace(':', '_').replace('.', '_')}{'_' + domain.replace(',', '_') if domain else ''}",
-            **time_series_doc
-        })
-        
-        logger.info("Successfully stored condensed analysis data in MongoDB")
+        # Insert a new document into the trends collection (MongoDB will generate _id)
+        result = collection.insert_one(analysis_doc)
+        logger.info(f"Successfully stored analysis data with AI insights in MongoDB trends collection with id: {result.inserted_id}")
     except Exception as e:
         logger.error(f"Failed to store data in MongoDB: {e}")
     
-    logger.info("Condensed trend analysis completed successfully")
-    return condensed_doc
+    logger.info("Trend analysis with AI insights completed successfully")
+    
+    return analysis_doc
 
+# Schedule the job to run every 30 minutes
 def schedule_jobs(domain=None):
     def run_analysis():
         analyze_trends(domain)
     
     schedule.every(30).minutes.do(run_analysis)
+    
+    # Run immediately on startup
     run_analysis()
     
+    # Keep the script running and execute scheduled jobs
     while True:
         schedule.run_pending()
         time.sleep(1)
@@ -633,11 +772,12 @@ def schedule_jobs(domain=None):
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Condensed Social Media Trend Analysis Service")
+    # Set up command line argument parsing
+    parser = argparse.ArgumentParser(description="Social Media Trend Analysis Service with AI Insights")
     parser.add_argument("--domain", type=str, help="Domain keywords to filter trends (comma-separated)")
     args = parser.parse_args()
     
     domain = args.domain
     
-    logger.info(f"Starting Condensed Social Media Trend Analysis Service{' for domain: ' + domain if domain else ''}")
+    logger.info(f"Starting Social Media Trend Analysis Service with Gemini AI{' for domain: ' + domain if domain else ''}")
     schedule_jobs(domain)

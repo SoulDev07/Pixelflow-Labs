@@ -4,6 +4,7 @@ nltk==3.9.1
 numpy==2.2.3
 pandas==2.2.3
 praw==7.8.1
+protobuf==6.30.0
 pymongo==4.6.2
 python-dotenv==1.0.1
 Requests==2.32.3
