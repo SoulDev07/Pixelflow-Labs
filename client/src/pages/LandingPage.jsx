@@ -1,18 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, useScroll, useSpring, useAnimation } from "framer-motion";
-import {
-  ChevronDown,
-  Video,
-  Wand2,
-  Zap,
-  Code2,
-  Play,
-  Instagram,
-  Twitter,
-  Youtube,
-  Linkedin,
-  ArrowRight,
-} from "lucide-react";
+import { ChevronDown, Video, Wand2, Zap, Code2, Play, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/layout/Navbar";
@@ -131,7 +119,10 @@ export default function PixelFlowLandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/text-to-video">
-                <Button size="lg" className="text-lg bg-purple-600 hover:bg-purple-700 text-white px-8 py-6 w-full sm:w-auto">
+                <Button
+                  size="lg"
+                  className="text-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-8 py-6 w-full sm:w-auto"
+                >
                   Create Your First Video
                 </Button>
               </Link>
@@ -139,7 +130,7 @@ export default function PixelFlowLandingPage() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="text-lg px-8 py-6 w-full sm:w-auto border-purple-500 text-purple-400 hover:bg-purple-500 hover:text-white"
+                  className="text-lg px-8 py-6 w-full sm:w-auto border-cyan-500 text-cyan-400 hover:bg-cyan-500 hover:text-white"
                 >
                   View Analytics
                 </Button>
@@ -164,7 +155,7 @@ export default function PixelFlowLandingPage() {
               viewport={{ once: true }}
               className="text-center mb-16"
             >
-              <h3 className="text-3xl font-bold mb-6">See What PixelFlow Can Create</h3>
+              <h3 className="text-3xl font-bold mb-6 text-purple-200">See What PixelFlow Can Create</h3>
               <p className="text-xl max-w-2xl mx-auto text-gray-300">
                 From product showcases to brand stories, create professional videos with just text input
               </p>
@@ -189,7 +180,7 @@ export default function PixelFlowLandingPage() {
                     <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-70"></div>
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-full"
+                        className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full"
                         onClick={() => setActiveVideo(item.video)}
                       >
                         <Play className="h-8 w-8" />
@@ -219,7 +210,7 @@ export default function PixelFlowLandingPage() {
               transition={{ duration: 0.5 }}
               className="mb-20 text-center"
             >
-              <h3 className="text-3xl font-bold mb-6">Why Choose PixelFlow</h3>
+              <h3 className="text-3xl font-bold mb-6 text-purple-200">Why Choose PixelFlow</h3>
               <p className="text-xl max-w-2xl mx-auto text-gray-300">
                 Create professional-looking videos for your social media campaigns without any video editing skills
               </p>
@@ -227,19 +218,34 @@ export default function PixelFlowLandingPage() {
             <div className="grid md:grid-cols-3 gap-10">
               {[
                 {
-                  icon: <Wand2 className="h-12 w-12 text-purple-500 mb-4" />,
+                  icon: <Wand2 className="h-12 w-12" />,
                   title: "AI-Powered Creation",
-                  description: "Our advanced AI understands your requirements and generates engaging video content tailored to your brand",
+                  description:
+                    "Our state-of-the-art AI understands context, style, and brand voice to generate captivating videos that resonate with your audience",
+                  gradient: "from-cyan-500/20 to-blue-500/20",
+                  borderColor: "border-cyan-500/30",
+                  iconBg: "bg-cyan-500/10",
+                  iconColor: "text-cyan-400",
                 },
                 {
-                  icon: <Zap className="h-12 w-12 text-purple-500 mb-4" />,
-                  title: "Lightning Fast",
-                  description: "Generate complete video ads in minutes instead of days, speeding up your content creation workflow",
+                  icon: <Zap className="h-12 w-12" />,
+                  title: "Lightning Fast Results",
+                  description:
+                    "Generate complete video campaigns in minutes instead of days, accelerating your content pipeline and time-to-market by up to 10x",
+                  gradient: "from-amber-500/20 to-yellow-500/20",
+                  borderColor: "border-yellow-500/30",
+                  iconBg: "bg-yellow-500/10",
+                  iconColor: "text-yellow-400",
                 },
                 {
-                  icon: <Code2 className="h-12 w-12 text-purple-500 mb-4" />,
-                  title: "No Technical Skills Needed",
-                  description: "Simply describe what you want, and our system handles the complex video generation process",
+                  icon: <Code2 className="h-12 w-12" />,
+                  title: "Zero Learning Curve",
+                  description:
+                    "Simply describe your vision in plain text, and watch as our AI transforms your words into professional-grade video content instantly",
+                  gradient: "from-green-500/20 to-emerald-500/20",
+                  borderColor: "border-green-500/30",
+                  iconBg: "bg-green-500/10",
+                  iconColor: "text-green-400",
                 },
               ].map((feature, index) => (
                 <motion.div
@@ -252,35 +258,58 @@ export default function PixelFlowLandingPage() {
                     hidden: { opacity: 0, y: 50 },
                   }}
                   transition={{ duration: 0.5, delay: index * 0.2 }}
-                  className="bg-gray-800 p-8 rounded-lg shadow-lg text-center hover:shadow-xl transition-shadow border border-purple-900/50"
+                  className={`bg-gradient-to-br ${feature.gradient} p-8 rounded-xl shadow-lg text-center hover:shadow-xl transition-shadow duration-300 border ${feature.borderColor} backdrop-blur-sm`}
                 >
-                  {feature.icon}
-                  <h4 className="text-xl font-semibold mb-4">{feature.title}</h4>
-                  <p className="text-gray-300">{feature.description}</p>
+                  <div className={`${feature.iconBg} w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-6`}>
+                    <div className={feature.iconColor}>{feature.icon}</div>
+                  </div>
+                  <h4 className="text-2xl font-semibold mb-4 bg-gradient-to-r from-white to-gray-300 text-transparent bg-clip-text">
+                    {feature.title}
+                  </h4>
+                  <p className="text-gray-300 leading-relaxed">{feature.description}</p>
                 </motion.div>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="py-20 bg-purple-900">
-          <div className="container mx-auto px-4 text-center">
+        <section className="py-20 relative overflow-hidden bg-gradient-to-b from-gray-800 to-gray-900">
+          <div className="absolute inset-0 opacity-20">
+            <div className="absolute inset-0 bg-grid-white/10 bg-grid-16 mix-blend-soft-light"></div>
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500 to-transparent"></div>
+            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500 to-transparent"></div>
+          </div>
+          <div className="container mx-auto px-4 relative z-10">
             <motion.div
               initial={{ opacity: 0, y: 50 }}
               whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
+              transition={{ duration: 0.7 }}
               viewport={{ once: true }}
-              className="max-w-2xl mx-auto"
+              className="max-w-4xl mx-auto text-center"
             >
-              <h3 className="text-3xl font-bold mb-6">Ready to Revolutionize Your Content Creation?</h3>
-              <p className="text-xl mb-8">
-                Join thousands of marketers who are saving time and resources with PixelFlow's AI-driven video generation.
+              <span className="inline-block bg-purple-900 border border-purple-500/30 text-purple-200 text-sm font-medium py-1 px-3 rounded-full mb-4">
+                PROJECT SHOWCASE
+              </span>
+              <h3 className="text-4xl md:text-5xl font-bold mb-6 text-gray-100">
+                Ready to Revolutionize Your <br />
+                <span className="text-purple-400">Content Creation?</span>
+              </h3>
+              <p className="text-xl md:text-2xl mb-10 text-gray-300 max-w-3xl mx-auto">
+                Experience how AI can transform your creative workflow and help you create professional videos without any editing skills.
               </p>
-              <Link to="/text-to-video">
-                <Button size="lg" className="text-lg bg-white hover:bg-gray-200 text-purple-900 px-8 py-6 font-bold">
-                  Create Your First Video Now
-                </Button>
-              </Link>
+
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-5 mb-8">
+                <Link to="/text-to-video">
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      size="lg"
+                      className="text-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-8 py-6 font-bold shadow-lg transition-all"
+                    >
+                      Create Your First Video Now <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+                  </motion.div>
+                </Link>
+              </div>
             </motion.div>
           </div>
         </section>
