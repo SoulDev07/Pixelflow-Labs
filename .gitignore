@@ -1,2 +1,20 @@
 myenv/
-scripts/.env
+venv/
+
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.whl
+*.dist-info/
+*.manifest
+*.spec
+*.db
+*.sqlite3
+*.sqlite
+*.db-journal
+
+*.env
