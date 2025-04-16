@@ -26,7 +26,7 @@ MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 # API Keys and Credentials
 REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
-REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "trend_analyzer_script v1.0")
+REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "trend_analyzer_script")
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
