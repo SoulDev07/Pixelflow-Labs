@@ -7,9 +7,9 @@ import {
   DownloadCloud,
   RefreshCw,
   Check,
-  Video,
   Zap,
   Palette,
+  Shield,
   Film,
   Star,
 } from "lucide-react";
@@ -27,11 +27,11 @@ const sampleTemplates = [
     title: "Product Showcase",
     description: "A sleek video highlighting product features with dynamic transitions",
     preset: {
-      productName: "EcoFresh Water Bottle",
+      productName: "PurrFection Premium Cat Food",
       description:
-        "A sustainable, insulated water bottle that keeps drinks cold for 24 hours or hot for 12 hours. Made from recycled materials with a sleek modern design.",
+        "Grain-free, high-protein cat food made with real meat as the first ingredient. Contains essential vitamins and minerals with no artificial preservatives. Specially formulated to support digestive health and maintain a shiny coat.",
       scenes:
-        "Scene 1: Close-up of bottle with water droplets, rotating slowly\nScene 2: Person hiking, taking a drink\nScene 3: Infographic showing insulation benefits\nScene 4: Product lineup in different colors\nScene 5: Logo and tagline 'Stay Fresh, Go Eco'",
+        "Scene 1: Elegant cat walking gracefully towards its food bowl\nScene 2: Close-up of cat food being poured, highlighting texture and quality\nScene 3: Cat eating happily, showing enjoyment",
     },
   },
   {
@@ -55,7 +55,7 @@ const sampleTemplates = [
       scenes:
         "Scene 1: Blender on kitchen counter with ingredients around it\nScene 2: Close-up of control panel as settings are selected\nScene 3: Ingredients being added to blender\nScene 4: Blending in action with smooth result\nScene 5: Final smoothie being poured and enjoyed",
     },
-  },
+  }
 ];
 
 // Visual elements for the AI processing animation
@@ -63,6 +63,7 @@ const aiProcessingSteps = [
   "Analyzing product details...",
   "Generating scene concepts...",
   "Creating visual elements...",
+  "Validating ethical guidelines...",
   "Rendering transitions...",
   "Finalizing video output...",
 ];
@@ -72,6 +73,7 @@ const loadingIcons = [
   { icon: Wand2, color: "text-teal-400" },
   { icon: Zap, color: "text-blue-400" },
   { icon: Palette, color: "text-purple-400" },
+  { icon: Shield, color: "text-emerald-400" },
   { icon: Film, color: "text-pink-400" },
   { icon: Star, color: "text-amber-400" },
 ];
@@ -81,12 +83,18 @@ export default function TextToVideo() {
     productName: "",
     description: "",
     scenes: "",
+    width: 256,
+    height: 256,
+    num_frames: 40,
+    fps: 8,
+    negative_prompt: "",
   });
   const [loading, setLoading] = useState(false);
   const [videoUrl, setVideoUrl] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [currentIconIndex, setCurrentIconIndex] = useState(0);
   const [downloadStatus, setDownloadStatus] = useState(null); // "downloading", "complete", null
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const videoRef = useRef(null);
 
   // AI processing animation effect - update both step text and icon
@@ -134,17 +142,17 @@ export default function TextToVideo() {
       // Handle the video file response
       const videoBlob = await response.blob();
       const videoObjectUrl = URL.createObjectURL(videoBlob);
-      
+
       // Set the video URL from the blob
       setVideoUrl(videoObjectUrl);
       setLoading(false);
       toast.success("Video generated successfully!");
-      
+
     } catch (error) {
       console.error("Error generating video:", error);
       toast.error("Failed to generate video. Please try again.");
       setLoading(false);
-      
+
       // FOR DEMO ONLY: Fall back to sample videos if the real API fails
       // Remove this in production
       if (process.env.NODE_ENV === "development") {
@@ -169,7 +177,7 @@ export default function TextToVideo() {
 
     try {
       setDownloadStatus("downloading");
-      
+
       // If videoUrl is already a blob URL (from our API call), we can use it directly
       if (videoUrl.startsWith("blob:")) {
         const response = await fetch(videoUrl);
@@ -195,7 +203,7 @@ export default function TextToVideo() {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       }
-      
+
       setDownloadStatus("complete");
 
       // Reset status after showing completion
@@ -210,7 +218,15 @@ export default function TextToVideo() {
   };
 
   const applyTemplate = (preset) => {
-    setFormData(preset);
+    // Maintain advanced settings when applying template
+    const advancedSettings = {
+      width: formData.width,
+      height: formData.height,
+      num_frames: formData.num_frames,
+      fps: formData.fps,
+      negative_prompt: formData.negative_prompt,
+    };
+    setFormData({ ...preset, ...advancedSettings });
     toast.success("Template applied! Customize it or generate right away.");
   };
 
@@ -310,8 +326,8 @@ export default function TextToVideo() {
                               {downloadStatus === "downloading"
                                 ? "Downloading..."
                                 : downloadStatus === "complete"
-                                ? "Downloaded"
-                                : "Save Video"}
+                                  ? "Downloaded"
+                                  : "Save Video"}
                             </Button>
                           </div>
                         </div>
@@ -431,6 +447,103 @@ export default function TextToVideo() {
                           />
                           <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-teal-500/20 to-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity -z-10 blur-xl"></div>
                         </div>
+
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            className="text-sm flex items-center text-teal-400 hover:text-teal-300 transition-colors"
+                            onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                          >
+                            {showAdvancedOptions ? (
+                              <>
+                                <span className="mr-1">▼</span> Hide Advanced Options
+                              </>
+                            ) : (
+                              <>
+                                <span className="mr-1">►</span> Show Advanced Options
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        {showAdvancedOptions && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="p-4 border border-white/10 rounded-xl bg-white/5"
+                          >
+                            <h4 className="text-white mb-4 font-medium">Advanced Settings</h4>
+                            <div className="grid grid-cols-2 gap-4 mb-4">
+                              <div>
+                                <Label htmlFor="width" className="text-white/80 text-sm mb-1 block">
+                                  Width (px)
+                                </Label>
+                                <Input
+                                  id="width"
+                                  name="width"
+                                  type="number"
+                                  value={formData.width}
+                                  onChange={handleInputChange}
+                                  className="bg-white/5 border-white/10 text-white h-10 rounded-lg"
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor="height" className="text-white/80 text-sm mb-1 block">
+                                  Height (px)
+                                </Label>
+                                <Input
+                                  id="height"
+                                  name="height"
+                                  type="number"
+                                  value={formData.height}
+                                  onChange={handleInputChange}
+                                  className="bg-white/5 border-white/10 text-white h-10 rounded-lg"
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor="num_frames" className="text-white/80 text-sm mb-1 block">
+                                  Frames
+                                </Label>
+                                <Input
+                                  id="num_frames"
+                                  name="num_frames"
+                                  type="number"
+                                  value={formData.num_frames}
+                                  onChange={handleInputChange}
+                                  className="bg-white/5 border-white/10 text-white h-10 rounded-lg"
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor="fps" className="text-white/80 text-sm mb-1 block">
+                                  FPS
+                                </Label>
+                                <Input
+                                  id="fps"
+                                  name="fps"
+                                  type="number"
+                                  value={formData.fps}
+                                  onChange={handleInputChange}
+                                  className="bg-white/5 border-white/10 text-white h-10 rounded-lg"
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <Label htmlFor="negative_prompt" className="text-white/80 text-sm mb-1 block">
+                                Negative Prompt (What to avoid in the video)
+                              </Label>
+                              <Textarea
+                                id="negative_prompt"
+                                name="negative_prompt"
+                                value={formData.negative_prompt}
+                                onChange={handleInputChange}
+                                className="bg-white/5 border-white/10 text-white min-h-[80px] rounded-lg"
+                                placeholder="Elements to avoid in the generated video (e.g., blurry footage, text errors)"
+                              />
+                            </div>
+                          </motion.div>
+                        )}
 
                         <motion.button
                           type="submit"
