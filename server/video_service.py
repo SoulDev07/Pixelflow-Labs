@@ -38,9 +38,6 @@ def generate_video_prompt(form_data, trends_data):
         Create a cinematic, engaging video prompt that will showcase this product effectively while
         incorporating relevant trending elements. The prompt should be detailed and visual.
         """
-        
-        print("Prompt for Gemini model:")
-        print(prompt)
 
         response = model.generate_content(prompt)
         video_prompt = response.text
@@ -102,6 +99,8 @@ def call_video_generation_api(video_prompt, **kwargs):
                 video_filename = f"generated_video_{os.urandom(4).hex()}.mp4"
                 video_path = os.path.join(temp_dir, video_filename)
                 
+                print(f"Saving video to {video_path}")
+
                 # Write the video file
                 with open(video_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):

@@ -92,7 +92,7 @@ def save_trend_analysis(analysis_doc):
     """Save trend analysis data to MongoDB"""
     try:
         db = get_db_connection()
-        if not db:
+        if db is None:
             return False
         
         collection = db["trends"]

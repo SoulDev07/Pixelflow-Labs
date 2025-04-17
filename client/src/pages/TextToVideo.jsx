@@ -131,11 +131,12 @@ export default function TextToVideo() {
         throw new Error("Failed to generate video");
       }
 
-      // Get the response data directly - API returns video URL immediately
-      const data = await response.json();
+      // Handle the video file response
+      const videoBlob = await response.blob();
+      const videoObjectUrl = URL.createObjectURL(videoBlob);
       
-      // Set the video URL from the response
-      setVideoUrl(data.videoUrl);
+      // Set the video URL from the blob
+      setVideoUrl(videoObjectUrl);
       setLoading(false);
       toast.success("Video generated successfully!");
       
@@ -168,16 +169,33 @@ export default function TextToVideo() {
 
     try {
       setDownloadStatus("downloading");
-      const response = await fetch(videoUrl);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${formData.productName.replace(/\s+/g, "-").toLowerCase()}-video.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      
+      // If videoUrl is already a blob URL (from our API call), we can use it directly
+      if (videoUrl.startsWith("blob:")) {
+        const response = await fetch(videoUrl);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${formData.productName.replace(/\s+/g, "-").toLowerCase()}-video.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        // For remote URLs (demo fallback)
+        const response = await fetch(videoUrl);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${formData.productName.replace(/\s+/g, "-").toLowerCase()}-video.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }
+      
       setDownloadStatus("complete");
 
       // Reset status after showing completion
