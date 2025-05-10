@@ -90,13 +90,13 @@ def call_video_generation_api(video_prompt, **kwargs):
         # Default parameters
         payload = {
             "prompt": video_prompt,
-            "negative_prompt": kwargs.get("negative_prompt", "low quality, blurry, artifacts"),
+            # "negative_prompt": kwargs.get("negative_prompt", "low quality, blurry, artifacts"),
             "num_inference_steps": kwargs.get("num_inference_steps", 50),
-            "guidance_scale": kwargs.get("guidance_scale", 7.5),
-            "height": kwargs.get("height", 256),
-            "width": kwargs.get("width", 256),
-            "num_frames": kwargs.get("num_frames", 24),
-            "fps": kwargs.get("fps", 8)
+            # "guidance_scale": kwargs.get("guidance_scale", 7.5),
+            # "height": kwargs.get("height", 256),
+            # "width": kwargs.get("width", 256),
+            # "num_frames": kwargs.get("num_frames", 24),
+            # "fps": kwargs.get("fps", 8)
         }
 
         # Stream the response to get the file directly

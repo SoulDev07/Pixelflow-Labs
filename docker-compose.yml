@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    ports:
+      - "3000:80"
+      - "8000:8000"
+    volumes:
+      - ./server:/app/server
+      - ./trend_job:/app/trend_job
+    env_file:
+      - ./server/.env
+    # Uncomment if you want it to restart on failure
+    # restart: unless-stopped 
